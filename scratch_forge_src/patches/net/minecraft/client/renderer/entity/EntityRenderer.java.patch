@@ -1,0 +1,23 @@
+--- a/net/minecraft/client/renderer/entity/EntityRenderer.java
++++ b/net/minecraft/client/renderer/entity/EntityRenderer.java
+@@ -104,8 +_,9 @@
+             renderLeash(p_114488_, p_114489_, entityrenderstate$leashstate);
+         }
+ 
+-        if (p_370221_.nameTag != null) {
+-            this.renderNameTag(p_370221_, p_370221_.nameTag, p_114488_, p_114489_, p_114490_);
++        var event = net.minecraftforge.client.event.ForgeEventFactoryClient.fireRenderNameTagEvent(p_370221_, p_370221_.nameTag, this, p_114488_, p_114489_, p_114490_);
++        if (!event.getResult().isDenied() && (event.getResult().isAllowed() || p_370221_.nameTag != null)) {
++           this.renderNameTag(p_370221_, event.getContent(), p_114488_, p_114489_, p_114490_);
+         }
+     }
+ 
+@@ -272,7 +_,7 @@
+         }
+ 
+         p_367427_.distanceToCameraSq = this.entityRenderDispatcher.distanceToSqr(p_367571_);
+-        boolean flag = p_367427_.distanceToCameraSq < 4096.0 && this.shouldShowName(p_367571_, p_367427_.distanceToCameraSq);
++        boolean flag = net.minecraftforge.client.ForgeHooksClient.isNameplateInRenderDistance(p_367571_, p_367427_.distanceToCameraSq) && this.shouldShowName(p_367571_, p_367427_.distanceToCameraSq);
+         if (flag) {
+             p_367427_.nameTag = this.getNameTag(p_367571_);
+             p_367427_.nameTagAttachment = p_367571_.getAttachments().getNullable(EntityAttachment.NAME_TAG, 0, p_367571_.getYRot(p_363243_));

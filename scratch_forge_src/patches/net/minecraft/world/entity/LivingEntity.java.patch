@@ -1,0 +1,690 @@
+--- a/net/minecraft/world/entity/LivingEntity.java
++++ b/net/minecraft/world/entity/LivingEntity.java
+@@ -136,7 +_,7 @@
+ import net.minecraft.world.scores.Scoreboard;
+ import org.slf4j.Logger;
+ 
+-public abstract class LivingEntity extends Entity implements Attackable {
++public abstract class LivingEntity extends Entity implements Attackable, net.minecraftforge.common.extensions.IForgeLivingEntity {
+     private static final Logger LOGGER = LogUtils.getLogger();
+     private static final String TAG_ACTIVE_EFFECTS = "active_effects";
+     private static final ResourceLocation SPEED_MODIFIER_POWDER_SNOW_ID = ResourceLocation.withDefaultNamespace("powder_snow");
+@@ -172,6 +_,8 @@
+     public static final float EXTRA_RENDER_CULLING_SIZE_WITH_BIG_HAT = 0.5F;
+     public static final float DEFAULT_BABY_SCALE = 0.5F;
+     public static final String ATTRIBUTES_FIELD = "attributes";
++    /** Forge: Use a variant that calls {@link ItemStack#isMonsterDisguise(Player, net.minecraft.world.entity.monster.Monster)} and {@link net.minecraftforge.event.entity.living.MonsterDisguiseEvent} */
++    @Deprecated
+     public static final Predicate<LivingEntity> PLAYER_NOT_WEARING_DISGUISE_ITEM = p_358894_ -> {
+         if (p_358894_ instanceof Player player) {
+             ItemStack itemstack = player.getItemBySlot(EquipmentSlot.HEAD);
+@@ -270,7 +_,8 @@
+         this.setYRot((float)(Math.random() * (float) (Math.PI * 2)));
+         this.yHeadRot = this.getYRot();
+         NbtOps nbtops = NbtOps.INSTANCE;
+-        this.brain = this.makeBrain(new Dynamic<>(nbtops, nbtops.createMap(ImmutableMap.of(nbtops.createString("memories"), nbtops.emptyMap()))));
++        var dyn = new Dynamic<>(nbtops, nbtops.createMap(ImmutableMap.of(nbtops.createString("memories"), nbtops.emptyMap())));
++        this.brain = net.minecraftforge.common.ForgeHooks.onLivingMakeBrain(this, this.makeBrain(dyn), dyn);
+     }
+ 
+     public Brain<?> getBrain() {
+@@ -324,7 +_,8 @@
+             .add(Attributes.EXPLOSION_KNOCKBACK_RESISTANCE)
+             .add(Attributes.WATER_MOVEMENT_EFFICIENCY)
+             .add(Attributes.MOVEMENT_EFFICIENCY)
+-            .add(Attributes.ATTACK_KNOCKBACK);
++            .add(Attributes.ATTACK_KNOCKBACK)
++            .add(Attributes.JUMP_STRENGTH);
+     }
+ 
+     @Override
+@@ -352,7 +_,8 @@
+                 float f = (float)Mth.ceil((double)this.fallDistance - d7);
+                 double d4 = Math.min((double)(0.2F + f / 15.0F), 2.5);
+                 int i = (int)(150.0 * d4);
+-                serverlevel.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK, p_20992_), d0, d1, d2, i, 0.0, 0.0, 0.0, 0.15F);
++                if (!p_20992_.addLandingEffects((ServerLevel) this.level(), p_20993_, p_20992_, this, i))
++                ((ServerLevel)this.level()).sendParticles(new BlockParticleOption(ParticleTypes.BLOCK, p_20992_).setPos(p_20993_), d0, d1, d2, i, 0.0, 0.0, 0.0, 0.15F);
+             }
+         }
+ 
+@@ -362,6 +_,7 @@
+         }
+     }
+ 
++    @Deprecated //FORGE: Use canDrownInFluidType instead
+     public final boolean canBreatheUnderwater() {
+         return this.getType().is(EntityTypeTags.CAN_BREATHE_UNDER_WATER);
+     }
+@@ -408,6 +_,10 @@
+                 }
+             }
+ 
++
++            int airSupply = this.getAirSupply();
++            net.minecraftforge.common.ForgeHooks.onLivingBreathe(this, airSupply - decreaseAirSupply(airSupply), increaseAirSupply(airSupply) - airSupply);
++            if (false) // Forge: Handled in ForgeHooks#onLivingBreathe(LivingEntity, int, int)
+             if (this.isEyeInFluid(FluidTags.WATER)
+                 && !this.level().getBlockState(BlockPos.containing(this.getX(), this.getEyeY(), this.getZ())).is(Blocks.BUBBLE_COLUMN)) {
+                 boolean flag1 = !this.canBreatheUnderwater() && !MobEffectUtil.hasWaterBreathing(this) && (!flag || !((Player)this).getAbilities().invulnerable);
+@@ -455,7 +_,7 @@
+             }
+         }
+ 
+-        if (this.isAlive() && (this.isInWaterRainOrBubble() || this.isInPowderSnow)) {
++        if (this.isAlive() && (this.isInWaterRainOrBubble() || this.isInPowderSnow || this.isInFluidType((fluidType, height) -> this.canFluidExtinguish(fluidType)))) {
+             this.extinguishFire();
+         }
+ 
+@@ -782,7 +_,8 @@
+         }
+ 
+         if (p_21096_.contains("Brain", 10)) {
+-            this.brain = this.makeBrain(new Dynamic<>(NbtOps.INSTANCE, p_21096_.get("Brain")));
++            var dyn = new Dynamic<>(NbtOps.INSTANCE, p_21096_.get("Brain"));
++            this.brain = net.minecraftforge.common.ForgeHooks.onLivingMakeBrain(this, this.makeBrain(dyn), dyn);
+         }
+     }
+ 
+@@ -794,7 +_,7 @@
+                 Holder<MobEffect> holder = iterator.next();
+                 MobEffectInstance mobeffectinstance = this.activeEffects.get(holder);
+                 if (!mobeffectinstance.tick(this, () -> this.onEffectUpdated(mobeffectinstance, true, null))) {
+-                    if (!this.level().isClientSide) {
++                    if (!this.level().isClientSide && !net.minecraftforge.event.ForgeEventFactory.onLivingEffectExpire(this, mobeffectinstance)) {
+                         iterator.remove();
+                         this.onEffectsRemoved(List.of(mobeffectinstance));
+                     }
+@@ -875,6 +_,7 @@
+             }
+         }
+ 
++        d0 = net.minecraftforge.common.ForgeHooks.getEntityVisibilityMultiplier(this, p_20969_, d0);
+         return d0;
+     }
+ 
+@@ -944,6 +_,7 @@
+         } else {
+             MobEffectInstance mobeffectinstance = this.activeEffects.get(p_147208_.getEffect());
+             boolean flag = false;
++            net.minecraftforge.event.ForgeEventFactory.onLivingEffectAdd(this, mobeffectinstance, p_147208_, p_147209_);
+             if (mobeffectinstance == null) {
+                 this.activeEffects.put(p_147208_.getEffect(), p_147208_);
+                 this.onEffectAdded(p_147208_, p_147209_);
+@@ -960,6 +_,10 @@
+     }
+ 
+     public boolean canBeAffected(MobEffectInstance p_21197_) {
++        var eventResult = net.minecraftforge.event.ForgeEventFactory.onLivingEffectCanApply(this, p_21197_).getResult();
++        if (!eventResult.isDefault()) {
++            return eventResult.isAllowed();
++        }
+         if (this.getType().is(EntityTypeTags.IMMUNE_TO_INFESTED)) {
+             return !p_21197_.is(MobEffects.INFESTED);
+         } else if (this.getType().is(EntityTypeTags.IMMUNE_TO_OOZING)) {
+@@ -993,6 +_,9 @@
+     }
+ 
+     public boolean removeEffect(Holder<MobEffect> p_335910_) {
++        if (net.minecraftforge.event.ForgeEventFactory.onLivingEffectRemove(this, p_335910_.get())) {
++            return false;
++        }
+         MobEffectInstance mobeffectinstance = this.removeEffectNoUpdate(p_335910_);
+         if (mobeffectinstance != null) {
+             this.onEffectsRemoved(List.of(mobeffectinstance));
+@@ -1036,6 +_,9 @@
+         this.effectsDirty = true;
+         if (!this.level().isClientSide) {
+             for (MobEffectInstance mobeffectinstance : p_364717_) {
++                if (net.minecraftforge.event.ForgeEventFactory.onLivingEffectRemove(this, mobeffectinstance)) {
++                    continue;
++                }
+                 mobeffectinstance.getEffect().value().removeAttributeModifiers(this.getAttributes());
+ 
+                 for (Entity entity : this.getPassengers()) {
+@@ -1074,6 +_,10 @@
+     }
+ 
+     public void heal(float p_21116_) {
++        p_21116_ = net.minecraftforge.event.ForgeEventFactory.onLivingHeal(this, p_21116_);
++        if (p_21116_ <= 0) {
++            return;
++        }
+         float f = this.getHealth();
+         if (f > 0.0F) {
+             this.setHealth(f + p_21116_);
+@@ -1094,6 +_,9 @@
+ 
+     @Override
+     public boolean hurtServer(ServerLevel p_361743_, DamageSource p_361865_, float p_365677_) {
++        if (!net.minecraftforge.common.ForgeHooks.onLivingAttack(this, p_361865_, p_365677_)) {
++            return false;
++        }
+         if (this.isInvulnerableTo(p_361743_, p_361865_)) {
+             return false;
+         } else if (this.isDeadOrDying()) {
+@@ -1114,14 +_,18 @@
+             boolean flag = false;
+             float f1 = 0.0F;
+             if (p_365677_ > 0.0F && this.isDamageSourceBlocked(p_361865_)) {
++                var ev = net.minecraftforge.event.ForgeEventFactory.onShieldBlock(this, p_361865_, p_365677_);
++                if (!ev.isCanceled()) {
++                    if (ev.shieldTakesDamage())
+                 this.hurtCurrentlyUsedShield(p_365677_);
+-                f1 = p_365677_;
+-                p_365677_ = 0.0F;
++                f1 = ev.getBlockedDamage();
++                p_365677_ -= ev.getBlockedDamage();
+                 if (!p_361865_.is(DamageTypeTags.IS_PROJECTILE) && p_361865_.getDirectEntity() instanceof LivingEntity livingentity) {
+                     this.blockUsingShield(livingentity);
+                 }
+ 
+-                flag = true;
++                flag = p_365677_ <= 0;
++                }
+             }
+ 
+             if (p_361865_.is(DamageTypeTags.IS_FREEZING) && this.getType().is(EntityTypeTags.FREEZE_HURTS_EXTRA_TYPES)) {
+@@ -1212,7 +_,7 @@
+             if (this instanceof ServerPlayer serverplayer) {
+                 CriteriaTriggers.ENTITY_HURT_PLAYER.trigger(serverplayer, p_361865_, f, p_365677_, flag);
+                 if (f1 > 0.0F && f1 < 3.4028235E37F) {
+-                    serverplayer.awardStat(Stats.DAMAGE_BLOCKED_BY_SHIELD, Math.round(f1 * 10.0F));
++                    ((ServerPlayer)this).awardStat(Stats.CUSTOM.get(Stats.DAMAGE_BLOCKED_BY_SHIELD), Math.round(f1 * 10.0F));
+                 }
+             }
+ 
+@@ -1240,7 +_,7 @@
+             this.lastHurtByPlayer = player;
+             return player;
+         } else {
+-            if (entity instanceof Wolf wolf && wolf.isTame()) {
++            if (entity instanceof net.minecraft.world.entity.TamableAnimal wolf && wolf.isTame()) {
+                 this.lastHurtByPlayerTime = 100;
+                 if (wolf.getOwner() instanceof Player player1) {
+                     this.lastHurtByPlayer = player1;
+@@ -1273,7 +_,7 @@
+             for (InteractionHand interactionhand : InteractionHand.values()) {
+                 ItemStack itemstack1 = this.getItemInHand(interactionhand);
+                 deathprotection = itemstack1.get(DataComponents.DEATH_PROTECTION);
+-                if (deathprotection != null) {
++                if (deathprotection != null && net.minecraftforge.common.ForgeHooks.onLivingUseTotem(this, p_21263_, itemstack1, interactionhand)) {
+                     itemstack = itemstack1.copy();
+                     itemstack1.shrink(1);
+                     break;
+@@ -1357,6 +_,7 @@
+     }
+ 
+     public void die(DamageSource p_21014_) {
++        if (net.minecraftforge.event.ForgeEventFactory.onLivingDeath(this, p_21014_)) return;
+         if (!this.isRemoved() && !this.dead) {
+             Entity entity = p_21014_.getEntity();
+             LivingEntity livingentity = this.getKillCredit();
+@@ -1392,10 +_,10 @@
+         if (this.level() instanceof ServerLevel serverlevel) {
+             boolean flag = false;
+             if (p_21269_ instanceof WitherBoss) {
+-                if (serverlevel.getGameRules().getBoolean(GameRules.RULE_MOBGRIEFING)) {
++                if (net.minecraftforge.event.ForgeEventFactory.getMobGriefingEvent(serverlevel, p_21269_)) {
+                     BlockPos blockpos = this.blockPosition();
+                     BlockState blockstate = Blocks.WITHER_ROSE.defaultBlockState();
+-                    if (this.level().getBlockState(blockpos).isAir() && blockstate.canSurvive(this.level(), blockpos)) {
++                    if (this.level().isEmptyBlock(blockpos) && blockstate.canSurvive(this.level(), blockpos)) {
+                         this.level().setBlock(blockpos, blockstate, 3);
+                         flag = true;
+                     }
+@@ -1410,6 +_,7 @@
+     }
+ 
+     protected void dropAllDeathLoot(ServerLevel p_342160_, DamageSource p_21192_) {
++        this.captureDrops(new java.util.ArrayList<>());
+         boolean flag = this.lastHurtByPlayerTime > 0;
+         if (this.shouldDropLoot() && p_342160_.getGameRules().getBoolean(GameRules.RULE_DOMOBLOOT)) {
+             this.dropFromLootTable(p_342160_, p_21192_, flag);
+@@ -1418,6 +_,11 @@
+ 
+         this.dropEquipment(p_342160_);
+         this.dropExperience(p_342160_, p_21192_.getEntity());
++
++        var drops = captureDrops(null);
++        if (!net.minecraftforge.event.ForgeEventFactory.onLivingDrops(this, p_21192_, drops, lastHurtByPlayerTime > 0)) {
++            drops.forEach(e -> level().addFreshEntity(e));
++        }
+     }
+ 
+     protected void dropEquipment(ServerLevel p_365823_) {
+@@ -1425,7 +_,8 @@
+ 
+     protected void dropExperience(ServerLevel p_370040_, @Nullable Entity p_342525_) {
+         if (!this.wasExperienceConsumed() && (this.isAlwaysExperienceDropper() || this.lastHurtByPlayerTime > 0 && this.shouldDropExperience() && p_370040_.getGameRules().getBoolean(GameRules.RULE_DOMOBLOOT))) {
+-            ExperienceOrb.award(p_370040_, this.position(), this.getExperienceReward(p_370040_, p_342525_));
++            int reward = net.minecraftforge.event.ForgeEventFactory.getExperienceDrop(this, this.lastHurtByPlayer, this.getExperienceReward(p_370040_, p_342525_));
++            ExperienceOrb.award(p_370040_, this.position(), reward);
+         }
+     }
+ 
+@@ -1501,6 +_,11 @@
+     }
+ 
+     public void knockback(double p_147241_, double p_147242_, double p_147243_) {
++        var event = net.minecraftforge.event.ForgeEventFactory.onLivingKnockBack(this, (float) p_147241_, p_147242_, p_147243_);
++        if (event.isCanceled()) return;
++        p_147241_ = event.getStrength();
++        p_147242_ = event.getRatioX();
++        p_147243_ = event.getRatioZ();
+         p_147241_ *= 1.0 - this.getAttributeValue(Attributes.KNOCKBACK_RESISTANCE);
+         if (!(p_147241_ <= 0.0)) {
+             this.hasImpulse = true;
+@@ -1582,6 +_,13 @@
+         } else {
+             BlockPos blockpos = this.blockPosition();
+             BlockState blockstate = this.getInBlockState();
++            var ladderPos = net.minecraftforge.common.ForgeHooks.isLivingOnLadder(blockstate, level(), blockpos, this);
++            if (ladderPos.isPresent()) {
++                this.lastClimbablePos = ladderPos;
++                return true;
++            } else if (ladderPos != null) {
++                return false;
++            }
+             if (blockstate.is(BlockTags.CLIMBABLE)) {
+                 this.lastClimbablePos = Optional.of(blockpos);
+                 return true;
+@@ -1636,6 +_,10 @@
+ 
+     @Override
+     public boolean causeFallDamage(float p_147187_, float p_147188_, DamageSource p_147189_) {
++        var event = net.minecraftforge.event.ForgeEventFactory.onLivingFall(this, p_147187_, p_147188_);
++        if (event.isCanceled()) return false;
++        p_147187_ = event.getDistance();
++        p_147188_ = event.getDamageMultiplier();
+         boolean flag = super.causeFallDamage(p_147187_, p_147188_, p_147189_);
+         int i = this.calculateFallDamage(p_147187_, p_147188_);
+         if (i > 0) {
+@@ -1663,9 +_,10 @@
+             int i = Mth.floor(this.getX());
+             int j = Mth.floor(this.getY() - 0.2F);
+             int k = Mth.floor(this.getZ());
+-            BlockState blockstate = this.level().getBlockState(new BlockPos(i, j, k));
++            BlockPos pos = new BlockPos(i, j, k);
++            BlockState blockstate = this.level().getBlockState(pos);
+             if (!blockstate.isAir()) {
+-                SoundType soundtype = blockstate.getSoundType();
++                SoundType soundtype = blockstate.getSoundType(level(), pos, this);
+                 this.playSound(soundtype.getFallSound(), soundtype.getVolume() * 0.5F, soundtype.getPitch() * 0.75F);
+             }
+         }
+@@ -1726,9 +_,9 @@
+                 float f2 = f1 - p_21194_;
+                 if (f2 > 0.0F && f2 < 3.4028235E37F) {
+                     if (this instanceof ServerPlayer) {
+-                        ((ServerPlayer)this).awardStat(Stats.DAMAGE_RESISTED, Math.round(f2 * 10.0F));
++                        ((ServerPlayer)this).awardStat(Stats.CUSTOM.get(Stats.DAMAGE_RESISTED), Math.round(f2 * 10.0F));
+                     } else if (p_21193_.getEntity() instanceof ServerPlayer) {
+-                        ((ServerPlayer)p_21193_.getEntity()).awardStat(Stats.DAMAGE_DEALT_RESISTED, Math.round(f2 * 10.0F));
++                        ((ServerPlayer)p_21193_.getEntity()).awardStat(Stats.CUSTOM.get(Stats.DAMAGE_DEALT_RESISTED), Math.round(f2 * 10.0F));
+                     }
+                 }
+             }
+@@ -1756,6 +_,8 @@
+ 
+     protected void actuallyHurt(ServerLevel p_365124_, DamageSource p_21240_, float p_21241_) {
+         if (!this.isInvulnerableTo(p_365124_, p_21240_)) {
++            p_21241_ = net.minecraftforge.common.ForgeHooks.onLivingHurt(this, p_21240_, p_21241_);
++            if (p_21241_ <= 0) return;
+             p_21241_ = this.getDamageAfterArmorAbsorb(p_21240_, p_21241_);
+             p_21241_ = this.getDamageAfterMagicAbsorb(p_21240_, p_21241_);
+             float f1 = Math.max(p_21241_ - this.getAbsorptionAmount(), 0.0F);
+@@ -1765,6 +_,7 @@
+                 serverplayer.awardStat(Stats.DAMAGE_DEALT_ABSORBED, Math.round(f * 10.0F));
+             }
+ 
++            f1 = net.minecraftforge.common.ForgeHooks.onLivingDamage(this, p_21240_, f1);
+             if (f1 != 0.0F) {
+                 this.getCombatTracker().recordDamage(p_21240_, f1);
+                 this.setHealth(this.getHealth() - f1);
+@@ -1824,6 +_,8 @@
+     }
+ 
+     public void swing(InteractionHand p_21012_, boolean p_21013_) {
++        ItemStack stack = this.getItemInHand(p_21012_);
++        if (!stack.isEmpty() && stack.onEntitySwing(this)) return;
+         if (!this.swinging || this.swingTime >= this.getCurrentSwingDuration() / 2 || this.swingTime < 0) {
+             this.swingTime = -1;
+             this.swinging = true;
+@@ -1936,9 +_,10 @@
+     }
+ 
+     private void swapHandItems() {
+-        ItemStack itemstack = this.getItemBySlot(EquipmentSlot.OFFHAND);
+-        this.setItemSlot(EquipmentSlot.OFFHAND, this.getItemBySlot(EquipmentSlot.MAINHAND));
+-        this.setItemSlot(EquipmentSlot.MAINHAND, itemstack);
++        var event = net.minecraftforge.event.ForgeEventFactory.onLivingSwapHandItems(this);
++        if (event.isCanceled()) return;
++        this.setItemSlot(EquipmentSlot.OFFHAND, event.getItemSwappedToOffHand());
++        this.setItemSlot(EquipmentSlot.MAINHAND, event.getItemSwappedToMainHand());
+     }
+ 
+     @Override
+@@ -2156,15 +_,18 @@
+             }
+ 
+             this.hasImpulse = true;
++            net.minecraftforge.common.ForgeHooks.onLivingJump(this);
+         }
+     }
+ 
++    @Deprecated // FORGE: use sinkInFluid instead
+     protected void goDownInWater() {
+-        this.setDeltaMovement(this.getDeltaMovement().add(0.0, -0.04F, 0.0));
++        this.sinkInFluid(net.minecraftforge.common.ForgeMod.WATER_TYPE.get());
+     }
+ 
++    @Deprecated // FORGE: use jumpInFluid instead
+     protected void jumpInLiquid(TagKey<Fluid> p_204043_) {
+-        this.setDeltaMovement(this.getDeltaMovement().add(0.0, 0.04F, 0.0));
++        this.setDeltaMovement(this.getDeltaMovement().add(0.0, 0.04F * this.getAttributeValue(net.minecraftforge.common.ForgeMod.SWIM_SPEED.getHolder().get()), 0.0));
+     }
+ 
+     protected float getWaterSlowDown() {
+@@ -2188,8 +_,8 @@
+     public void travel(Vec3 p_21280_) {
+         if (this.isControlledByLocalInstance()) {
+             FluidState fluidstate = this.level().getFluidState(this.blockPosition());
+-            if ((this.isInWater() || this.isInLava()) && this.isAffectedByFluids() && !this.canStandOnFluid(fluidstate)) {
+-                this.travelInFluid(p_21280_);
++            if ((this.isInWater() || this.isInLava() || this.isInFluidType(fluidstate)) && this.isAffectedByFluids() && !this.canStandOnFluid(fluidstate)) {
++                this.travelInFluid(p_21280_, fluidstate);
+             } else if (this.isFallFlying()) {
+                 this.travelFallFlying();
+             } else {
+@@ -2200,7 +_,7 @@
+ 
+     private void travelInAir(Vec3 p_362087_) {
+         BlockPos blockpos = this.getBlockPosBelowThatAffectsMyMovement();
+-        float f = this.onGround() ? this.level().getBlockState(blockpos).getBlock().getFriction() : 1.0F;
++        float f = this.onGround() ? this.level().getBlockState(blockpos).getFriction(level(), blockpos, this) : 1.0F;
+         float f1 = f * 0.91F;
+         Vec3 vec3 = this.handleRelativeFrictionAndCalculateMovement(p_362087_, f);
+         double d0 = vec3.y;
+@@ -2223,10 +_,18 @@
+         }
+     }
+ 
+-    private void travelInFluid(Vec3 p_362114_) {
++    @Deprecated // FORGE: Use the version that takes a FluidState
++    private void travelInFluid(Vec3 p_365480_) {
++        this.travelInFluid(p_365480_, net.minecraft.world.level.material.Fluids.WATER.defaultFluidState());
++    }
++
++    private void travelInFluid(Vec3 p_362114_, FluidState fluidstate) {
+         boolean flag = this.getDeltaMovement().y <= 0.0;
+         double d0 = this.getY();
+         double d1 = this.getEffectiveGravity();
++        if (this.isInFluidType(fluidstate) && this.moveInFluid(fluidstate, p_362114_, d0)) {
++            // Modded fluid handled it
++        } else
+         if (this.isInWater()) {
+             float f = this.isSprinting() ? 0.9F : this.getWaterSlowDown();
+             float f1 = 0.02F;
+@@ -2244,6 +_,7 @@
+                 f = 0.96F;
+             }
+ 
++                f1 *= this.getAttributeValue(net.minecraftforge.common.ForgeMod.SWIM_SPEED.getHolder().get());
+             this.moveRelative(f1, p_362114_);
+             this.move(MoverType.SELF, this.getDeltaMovement());
+             Vec3 vec3 = this.getDeltaMovement();
+@@ -2392,7 +_,7 @@
+             double d0 = Mth.clamp(p_21298_.x, -0.15F, 0.15F);
+             double d1 = Mth.clamp(p_21298_.z, -0.15F, 0.15F);
+             double d2 = Math.max(p_21298_.y, -0.15F);
+-            if (d2 < 0.0 && !this.getInBlockState().is(Blocks.SCAFFOLDING) && this.isSuppressingSlidingDownLadder() && this instanceof Player) {
++            if (d2 < 0.0 && !this.getInBlockState().isScaffolding(this) && this.isSuppressingSlidingDownLadder() && this instanceof Player) {
+                 d2 = 0.0;
+             }
+ 
+@@ -2425,6 +_,7 @@
+ 
+     @Override
+     public void tick() {
++        if (net.minecraftforge.event.ForgeEventFactory.onLivingTick(this)) return;
+         super.tick();
+         this.updatingUsingItem();
+         this.updateSwimAmount();
+@@ -2577,6 +_,7 @@
+             };
+             ItemStack itemstack1 = this.getItemBySlot(equipmentslot);
+             if (this.equipmentHasChanged(itemstack, itemstack1)) {
++                net.minecraftforge.event.ForgeEventFactory.onLivingEquipmentChange(this, equipmentslot, itemstack, itemstack1);
+                 if (map == null) {
+                     map = Maps.newEnumMap(EquipmentSlot.class);
+                 }
+@@ -2736,6 +_,10 @@
+         profilerfiller.push("jump");
+         if (this.jumping && this.isAffectedByFluids()) {
+             double d3;
++            var fluidType = this.getMaxHeightFluidType();
++            if (!fluidType.isAir()) {
++                d3 = this.getFluidTypeHeight(fluidType);
++            } else
+             if (this.isInLava()) {
+                 d3 = this.getFluidHeight(FluidTags.LAVA);
+             } else {
+@@ -2746,15 +_,22 @@
+             double d4 = this.getFluidJumpThreshold();
+             if (!flag || this.onGround() && !(d3 > d4)) {
+                 if (!this.isInLava() || this.onGround() && !(d3 > d4)) {
++                    if (fluidType.isAir() || this.onGround() && !(d3 > d4)) {
+                     if ((this.onGround() || flag && d3 <= d4) && this.noJumpDelay == 0) {
+                         this.jumpFromGround();
+                         this.noJumpDelay = 10;
+                     }
++                    } else {
++                        this.jumpInFluid(fluidType);
++                    }
+                 } else {
+-                    this.jumpInLiquid(FluidTags.LAVA);
++                    var old = this.getDeltaMovement();
++                    this.jumpInFluid(net.minecraftforge.common.ForgeMod.LAVA_TYPE.get());
++                    if (this instanceof Player)
++                        System.out.println(old + " " + this.getDeltaMovement());
+                 }
+             } else {
+-                this.jumpInLiquid(FluidTags.WATER);
++                this.jumpInFluid(net.minecraftforge.common.ForgeMod.WATER_TYPE.get());
+             }
+         } else {
+             this.noJumpDelay = 0;
+@@ -3104,8 +_,11 @@
+ 
+     private void updatingUsingItem() {
+         if (this.isUsingItem()) {
+-            if (ItemStack.isSameItem(this.getItemInHand(this.getUsedItemHand()), this.useItem)) {
++            var current = this.getItemInHand(this.getUsedItemHand());
++            if (net.minecraftforge.common.ForgeHooks.canContinueUsing(this.useItem, current)) {
+                 this.useItem = this.getItemInHand(this.getUsedItemHand());
++            }
++            if (this.useItem == current) {
+                 this.updateUsingItem(this.useItem);
+             } else {
+                 this.stopUsingItem();
+@@ -3114,8 +_,12 @@
+     }
+ 
+     protected void updateUsingItem(ItemStack p_147201_) {
++        if (!p_147201_.isEmpty()) {
++            this.useItemRemaining = net.minecraftforge.event.ForgeEventFactory.onItemUseTick(this, p_147201_, this.getUseItemRemainingTicks());
++        }
++        if (this.getUseItemRemainingTicks() > 0)
+         p_147201_.onUseTick(this.level(), this, this.getUseItemRemainingTicks());
+-        if (--this.useItemRemaining == 0 && !this.level().isClientSide && !p_147201_.useOnRelease()) {
++        if (--this.useItemRemaining <= 0 && !this.level().isClientSide && !p_147201_.useOnRelease()) {
+             this.completeUsingItem();
+         }
+     }
+@@ -3143,8 +_,10 @@
+     public void startUsingItem(InteractionHand p_21159_) {
+         ItemStack itemstack = this.getItemInHand(p_21159_);
+         if (!itemstack.isEmpty() && !this.isUsingItem()) {
++            int duration = net.minecraftforge.event.ForgeEventFactory.onItemUseStart(this, itemstack, itemstack.getUseDuration(this));
++            if (duration < 0) return;
+             this.useItem = itemstack;
+-            this.useItemRemaining = itemstack.getUseDuration(this);
++            this.useItemRemaining = duration;
+             if (!this.level().isClientSide) {
+                 this.setLivingEntityFlag(1, true);
+                 this.setLivingEntityFlag(2, p_21159_ == InteractionHand.OFF_HAND);
+@@ -3196,6 +_,9 @@
+             vec31 = vec31.xRot(-this.getXRot() * (float) (Math.PI / 180.0));
+             vec31 = vec31.yRot(-this.getYRot() * (float) (Math.PI / 180.0));
+             vec31 = vec31.add(this.getX(), this.getEyeY(), this.getZ());
++            if (this.level() instanceof ServerLevel serverLevel) //Forge: Fix MC-2518 spawnParticle is nooped on server, need to use server specific variant
++                serverLevel.sendParticles(new ItemParticleOption(ParticleTypes.ITEM, p_21061_), vec31.x, vec31.y, vec31.z, 1, vec3.x, vec3.y + 0.05D, vec3.z, 0.0D);
++            else
+             this.level()
+                 .addParticle(
+                     new ItemParticleOption(ParticleTypes.ITEM, p_21061_),
+@@ -3216,7 +_,9 @@
+                 this.releaseUsingItem();
+             } else {
+                 if (!this.useItem.isEmpty() && this.isUsingItem()) {
++                    ItemStack copy = this.useItem.copy();
+                     ItemStack itemstack = this.useItem.finishUsingItem(this.level(), this);
++                    itemstack = net.minecraftforge.event.ForgeEventFactory.onItemUseFinish(this, copy, getUseItemRemainingTicks(), itemstack);
+                     if (itemstack != this.useItem) {
+                         this.setItemInHand(interactionhand, itemstack);
+                     }
+@@ -3244,7 +_,13 @@
+ 
+     public void releaseUsingItem() {
+         if (!this.useItem.isEmpty()) {
++            if (!net.minecraftforge.event.ForgeEventFactory.onUseItemStop(this, useItem, this.getUseItemRemainingTicks())) {
++               ItemStack copy = this instanceof Player ? useItem.copy() : null;
+             this.useItem.releaseUsing(this.level(), this, this.getUseItemRemainingTicks());
++               if (copy != null && useItem.isEmpty()) {
++                   net.minecraftforge.event.ForgeEventFactory.onPlayerDestroyItem((Player)this, copy, getUsedItemHand());
++               }
++            }
+             if (this.useItem.useOnRelease()) {
+                 this.updatingUsingItem();
+             }
+@@ -3254,6 +_,7 @@
+     }
+ 
+     public void stopUsingItem() {
++        if (this.isUsingItem() && !this.useItem.isEmpty()) this.useItem.onStopUsing(this, useItemRemaining);
+         if (!this.level().isClientSide) {
+             boolean flag = this.isUsingItem();
+             this.setLivingEntityFlag(1, false);
+@@ -3274,7 +_,8 @@
+     public ItemStack getItemBlockingWith() {
+         if (this.isUsingItem() && !this.useItem.isEmpty()) {
+             Item item = this.useItem.getItem();
+-            if (item.getUseAnimation(this.useItem) != ItemUseAnimation.BLOCK) {
++            boolean canBlock = this.useItem.canPerformAction(net.minecraftforge.common.ToolActions.SHIELD_BLOCK);
++            if (!canBlock) {
+                 return null;
+             } else {
+                 return item.getUseDuration(this.useItem, this) - this.useItemRemaining < 5 ? null : this.useItem;
+@@ -3419,8 +_,8 @@
+         }
+ 
+         BlockState blockstate = this.level().getBlockState(p_21141_);
+-        if (blockstate.getBlock() instanceof BedBlock) {
+-            this.level().setBlock(p_21141_, blockstate.setValue(BedBlock.OCCUPIED, Boolean.valueOf(true)), 3);
++        if (blockstate.isBed(level(), p_21141_, this)) {
++            blockstate.setBedOccupied(level(), p_21141_, this, true);
+         }
+ 
+         this.setPose(Pose.SLEEPING);
+@@ -3435,15 +_,15 @@
+     }
+ 
+     private boolean checkBedExists() {
+-        return this.getSleepingPos().map(p_374931_ -> this.level().getBlockState(p_374931_).getBlock() instanceof BedBlock).orElse(false);
++        return this.getSleepingPos().map(p_341272_ -> net.minecraftforge.event.ForgeEventFactory.fireSleepingLocationCheck(this, p_341272_)).orElse(false);
+     }
+ 
+     public void stopSleeping() {
+         this.getSleepingPos().filter(this.level()::hasChunkAt).ifPresent(p_261435_ -> {
+             BlockState blockstate = this.level().getBlockState(p_261435_);
+-            if (blockstate.getBlock() instanceof BedBlock) {
++            if (blockstate.isBed(level(), p_261435_, this)) {
+                 Direction direction = blockstate.getValue(BedBlock.FACING);
+-                this.level().setBlock(p_261435_, blockstate.setValue(BedBlock.OCCUPIED, Boolean.valueOf(false)), 3);
++                blockstate.setBedOccupied(level(), p_261435_, this, false);
+                 Vec3 vec31 = BedBlock.findStandUpPosition(this.getType(), this.level(), p_261435_, direction, this.getYRot()).orElseGet(() -> {
+                     BlockPos blockpos = p_261435_.above();
+                     return new Vec3((double)blockpos.getX() + 0.5, (double)blockpos.getY() + 0.1, (double)blockpos.getZ() + 0.5);
+@@ -3464,7 +_,9 @@
+     @Nullable
+     public Direction getBedOrientation() {
+         BlockPos blockpos = this.getSleepingPos().orElse(null);
+-        return blockpos != null ? BedBlock.getBedOrientation(this.level(), blockpos) : null;
++        if (blockpos == null) return Direction.UP;
++        BlockState state = this.level().getBlockState(blockpos);
++        return !state.isBed(level(), blockpos, this) ? Direction.UP : state.getBedDirection(level(), blockpos);
+     }
+ 
+     @Override
+@@ -3473,7 +_,7 @@
+     }
+ 
+     public ItemStack getProjectile(ItemStack p_21272_) {
+-        return ItemStack.EMPTY;
++        return net.minecraftforge.common.ForgeHooks.getProjectile(this, p_21272_, ItemStack.EMPTY);
+     }
+ 
+     private static byte entityEventForEquipmentBreak(EquipmentSlot p_21267_) {
+@@ -3528,6 +_,8 @@
+     }
+ 
+     public final EquipmentSlot getEquipmentSlotForItem(ItemStack p_147234_) {
++        final EquipmentSlot slot = p_147234_.getEquipmentSlot();
++        if (slot != null) return slot; // FORGE: Allow modders to set a non-default equipment slot for a stack; e.g. a non-armor chestplate-slot item
+         Equippable equippable = p_147234_.get(DataComponents.EQUIPPABLE);
+         return equippable != null && this.canUseSlot(equippable.slot()) ? equippable.slot() : EquipmentSlot.MAINHAND;
+     }
+@@ -3659,5 +_,42 @@
+     }
+ 
+     public static record Fallsounds(SoundEvent small, SoundEvent big) {
++    }
++
++    /**
++     * Returns true if the entity's rider (EntityPlayer) should face forward when mounted.
++     * currently only used in vanilla code by pigs.
++     *
++     * @param player The player who is riding the entity.
++     * @return If the player should orient the same direction as this entity.
++     */
++    public boolean shouldRiderFaceForward(Player player) {
++        return this instanceof net.minecraft.world.entity.animal.Pig;
++    }
++
++    private net.minecraftforge.common.util.LazyOptional<?>[] handlers = net.minecraftforge.items.wrapper.EntityEquipmentInvWrapper.create(this);
++
++    @Override
++    public <T> net.minecraftforge.common.util.LazyOptional<T> getCapability(net.minecraftforge.common.capabilities.Capability<T> capability, @Nullable Direction facing) {
++        if (capability == net.minecraftforge.common.capabilities.ForgeCapabilities.ITEM_HANDLER && this.isAlive()) {
++             if (facing == null) return handlers[2].cast();
++             else if (facing.getAxis().isVertical()) return handlers[0].cast();
++             else if (facing.getAxis().isHorizontal()) return handlers[1].cast();
++        }
++        return super.getCapability(capability, facing);
++    }
++
++    @Override
++    public void invalidateCaps() {
++        super.invalidateCaps();
++        for (int x = 0; x < handlers.length; x++) {
++             handlers[x].invalidate();
++        }
++    }
++
++    @Override
++    public void reviveCaps() {
++        super.reviveCaps();
++        handlers = net.minecraftforge.items.wrapper.EntityEquipmentInvWrapper.create(this);
+     }
+ }

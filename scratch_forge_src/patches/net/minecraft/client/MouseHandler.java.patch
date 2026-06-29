@@ -1,0 +1,79 @@
+--- a/net/minecraft/client/MouseHandler.java
++++ b/net/minecraft/client/MouseHandler.java
+@@ -85,6 +_,7 @@
+                 this.activeButton = -1;
+             }
+ 
++            if (net.minecraftforge.client.event.ForgeEventFactoryClient.onMouseButtonPre(p_91532_, p_91533_, p_91534_)) return;
+             if (this.minecraft.getOverlay() == null) {
+                 if (this.minecraft.screen == null) {
+                     if (!this.mouseGrabbed && flag) {
+@@ -98,7 +_,7 @@
+                         screen.afterMouseAction();
+ 
+                         try {
+-                            if (screen.mouseClicked(d0, d1, i)) {
++                            if (net.minecraftforge.client.event.ForgeEventFactoryClient.onScreenMouseClicked(screen, d0, d1, i)) {
+                                 return;
+                             }
+                         } catch (Throwable throwable1) {
+@@ -112,7 +_,7 @@
+                         }
+                     } else {
+                         try {
+-                            if (screen.mouseReleased(d0, d1, i)) {
++                            if (net.minecraftforge.client.event.ForgeEventFactoryClient.onScreenMouseReleased(screen, d0, d1, i)) {
+                                 return;
+                             }
+                         } catch (Throwable throwable) {
+@@ -147,6 +_,7 @@
+                 }
+             }
+         }
++        net.minecraftforge.client.event.ForgeEventFactoryClient.onMouseButtonPost(p_91532_, p_91533_, p_91534_);
+     }
+ 
+     private void onScroll(long p_91527_, double p_91528_, double p_91529_) {
+@@ -160,7 +_,9 @@
+                 if (this.minecraft.screen != null) {
+                     double d3 = this.xpos * (double)this.minecraft.getWindow().getGuiScaledWidth() / (double)this.minecraft.getWindow().getScreenWidth();
+                     double d4 = this.ypos * (double)this.minecraft.getWindow().getGuiScaledHeight() / (double)this.minecraft.getWindow().getScreenHeight();
+-                    this.minecraft.screen.mouseScrolled(d3, d4, d1, d2);
++                    if (net.minecraftforge.client.event.ForgeEventFactoryClient.onScreenMouseScrollPre(this.minecraft.screen, d3, d4, d1, d2)) return;
++                    if (this.minecraft.screen.mouseScrolled(d3, d4, d1, d2)) return;
++                    net.minecraftforge.client.event.ForgeEventFactoryClient.onScreenMouseScrollPost(this.minecraft.screen, d3, d4, d1, d2);
+                     this.minecraft.screen.afterMouseAction();
+                 } else if (this.minecraft.player != null) {
+                     Vector2i vector2i = this.scrollWheelHandler.onMouseScroll(d1, d2);
+@@ -169,6 +_,7 @@
+                     }
+ 
+                     int i = vector2i.y == 0 ? -vector2i.x : vector2i.y;
++                    if (net.minecraftforge.client.event.ForgeEventFactoryClient.onMouseScroll(this, d1, d2)) return;
+                     if (this.minecraft.player.isSpectator()) {
+                         if (this.minecraft.gui.getSpectatorGui().isMenuActive()) {
+                             this.minecraft.gui.getSpectatorGui().onMouseScrolled(-i);
+@@ -274,7 +_,7 @@
+                     double d5 = this.accumulatedDY * (double)this.minecraft.getWindow().getGuiScaledHeight() / (double)this.minecraft.getWindow().getScreenHeight();
+ 
+                     try {
+-                        screen.mouseDragged(d2, d3, this.activeButton, d4, d5);
++                        net.minecraftforge.client.ForgeHooksClient.onScreenMouseDrag(screen, d2, d3, this.activeButton, d4, d5);
+                     } catch (Throwable throwable) {
+                         CrashReport crashreport1 = CrashReport.forThrowable(throwable, "mouseDragged event handler");
+                         screen.fillCrashDetails(crashreport1);
+@@ -349,6 +_,14 @@
+ 
+     public double ypos() {
+         return this.ypos;
++    }
++
++    public double getXVelocity() {
++        return this.accumulatedDX;
++    }
++
++    public double getYVelocity() {
++        return this.accumulatedDY;
+     }
+ 
+     public void setIgnoreFirstMove() {

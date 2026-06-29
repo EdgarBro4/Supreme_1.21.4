@@ -1,0 +1,70 @@
+--- a/net/minecraft/client/renderer/GameRenderer.java
++++ b/net/minecraft/client/renderer/GameRenderer.java
+@@ -158,6 +_,10 @@
+             this.setPostEffect(ResourceLocation.withDefaultNamespace("spider"));
+         } else if (p_109107_ instanceof EnderMan) {
+             this.setPostEffect(ResourceLocation.withDefaultNamespace("invert"));
++        } else if (p_109107_ != null) {
++            var rl = net.minecraftforge.client.EntitySpectatorShaderManager.get(p_109107_.getType());
++            if (rl != null)
++                this.setPostEffect(rl);
+         }
+     }
+ 
+@@ -171,8 +_,13 @@
+         if (!(f < 1.0F)) {
+             PostChain postchain = this.minecraft.getShaderManager().getPostChain(BLUR_POST_CHAIN_ID, LevelTargetBundle.MAIN_TARGETS);
+             if (postchain != null) {
++                boolean wasBlendEnabled = RenderSystem.isBlendEnabled();
++                if (wasBlendEnabled)
++                    RenderSystem.disableBlend();
+                 postchain.setUniform("Radius", f);
+                 postchain.process(this.minecraft.getMainRenderTarget(), this.resourcePool);
++                if (wasBlendEnabled)
++                    RenderSystem.enableBlend();
+             }
+         }
+     }
+@@ -312,7 +_,7 @@
+                 f *= Mth.lerp(f2, 1.0F, 0.85714287F);
+             }
+ 
+-            return f;
++            return net.minecraftforge.client.event.ForgeEventFactoryClient.fireComputeFov(this, p_109142_, p_109143_, f, p_109144_).getFOV();
+         }
+     }
+ 
+@@ -470,12 +_,12 @@
+                     (float)((double)window.getHeight() / window.getGuiScale()),
+                     0.0F,
+                     1000.0F,
+-                    21000.0F
++                    net.minecraftforge.client.ForgeHooksClient.getGuiFarPlane()
+                 );
+             RenderSystem.setProjectionMatrix(matrix4f, ProjectionType.ORTHOGRAPHIC);
+             Matrix4fStack matrix4fstack = RenderSystem.getModelViewStack();
+             matrix4fstack.pushMatrix();
+-            matrix4fstack.translation(0.0F, 0.0F, -11000.0F);
++            matrix4fstack.translation(0.0F, 0.0F, 10000F - net.minecraftforge.client.ForgeHooksClient.getGuiFarPlane());
+             Lighting.setupFor3DItems();
+             GuiGraphics guigraphics = new GuiGraphics(this.minecraft, this.renderBuffers.bufferSource());
+             if (flag && p_109096_ && this.minecraft.level != null) {
+@@ -501,7 +_,7 @@
+                 }
+             } else if (flag && this.minecraft.screen != null) {
+                 try {
+-                    this.minecraft.screen.renderWithTooltip(guigraphics, i, j, p_343467_.getGameTimeDeltaTicks());
++                    net.minecraftforge.client.ForgeHooksClient.drawScreen(this.minecraft.screen, guigraphics, i, j, p_343467_.getRealtimeDeltaTicks());
+                 } catch (Throwable throwable1) {
+                     CrashReport crashreport1 = CrashReport.forThrowable(throwable1, "Rendering screen");
+                     CrashReportCategory crashreportcategory1 = crashreport1.addCategory("Screen render details");
+@@ -657,6 +_,9 @@
+         if (this.minecraft.options.bobView().get()) {
+             this.bobView(posestack, camera.getPartialTickTime());
+         }
++
++        var cameraSetup = net.minecraftforge.client.event.ForgeEventFactoryClient.fireComputeCameraAngles(this, camera, f);
++        camera.setRotation(cameraSetup.getYaw(), cameraSetup.getPitch(), cameraSetup.getRoll());
+ 
+         matrix4f.mul(posestack.last().pose());
+         float f3 = this.minecraft.options.screenEffectScale().get().floatValue();

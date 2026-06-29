@@ -1,0 +1,30 @@
+--- a/net/minecraft/client/renderer/texture/AbstractTexture.java
++++ b/net/minecraft/client/renderer/texture/AbstractTexture.java
+@@ -53,6 +_,8 @@
+         RenderSystem.assertOnRenderThreadOrInit();
+         int i;
+         int j;
++        this.blur = p_117961_;
++        this.mipmap = p_117962_;
+         if (p_117961_) {
+             i = p_117962_ ? 9987 : 9729;
+             j = 9729;
+@@ -110,5 +_,18 @@
+ 
+     @Override
+     public void close() {
++    }
++
++    // FORGE: This seems to have been stripped out, but we need it
++    private boolean blur, mipmap, lastBlur, lastMipmap;
++
++    public void setBlurMipmap(boolean blur, boolean mipmap) {
++        this.lastBlur = this.blur;
++        this.lastMipmap = this.mipmap;
++        setFilter(blur, mipmap);
++    }
++
++    public void restoreLastBlurMipmap() {
++        setFilter(this.lastBlur, this.lastMipmap);
+     }
+ }

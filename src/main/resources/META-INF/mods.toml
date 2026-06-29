@@ -1,0 +1,26 @@
+modLoader="javafml"
+loaderVersion="[24,)"
+license="All Rights Reserved"
+
+[[mods]]
+modId="skin"
+version="1.0.0"
+displayName="Supreme"
+description='''Black & Red Client by staehc_remerpus'''
+logoFile=""
+credits=""
+authors="staehc_remerpus"
+
+[[dependencies.skin]]
+modId="forge"
+mandatory=true
+versionRange="[54,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.skin]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.21.4,1.22)"
+ordering="NONE"
+side="BOTH"
